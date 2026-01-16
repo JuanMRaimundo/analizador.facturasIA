@@ -8,6 +8,11 @@ const nextConfig = {
 		// !! Ignora errores de estilo para poder desplegar !!
 		ignoreDuringBuilds: true,
 	},
+	experimental: {
+		serverActions: {
+			bodySizeLimit: "50mb",
+		},
+	},
 };
 
 export default nextConfig;
