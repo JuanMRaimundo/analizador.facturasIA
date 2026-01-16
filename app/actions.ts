@@ -4,55 +4,56 @@ import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 
-// 1. Definimos la estructura EXACTA que queremos extraer
-const invoiceSchema = z.object({
-	invoiceNumber: z.string().describe("El número de la factura o comprobante"),
-	date: z.string().describe("La fecha de emisión (formato DD/MM/YYYY)"),
-	time: z
-		.string()
-		.optional()
-		.describe("La hora de emisión si está disponible (formato HH:MM)"),
-	vendorName: z
-		.string()
-		.describe("El nombre de la empresa o negocio que emite la factura"),
-	totalAmount: z.number().describe("El monto total final a pagar"),
-	currency: z.string().describe("La moneda (ARS, USD, EUR)"),
+// 1. Esquema de UNA factura (Este ya lo tenías)
+const singleInvoiceSchema = z.object({
+	vendorName: z.string().describe("Nombre del proveedor o empresa emisora"),
+	invoiceNumber: z.string().describe("Número de la factura"),
+	date: z.string().describe("Fecha de emisión (DD/MM/AAAA)"),
+	currency: z.string().describe("Moneda (ARS, USD)"),
+	totalAmount: z.number().describe("Total final a pagar"),
+	// Hacemos los items opcionales para ahorrar tokens en documentos gigantes
 	items: z
 		.array(
 			z.object({
-				description: z.string().describe("Nombre del producto o servicio"),
-				quantity: z.number().describe("Cantidad comprada"),
-				unitPrice: z.number().describe("Precio unitario"),
-				total: z.number().describe("Precio total de la línea"),
+				description: z.string(),
+				total: z.number(),
 			})
 		)
-		.describe("Lista de items comprados"),
+		.optional()
+		.describe("Resumen de items si es legible"),
 });
 
-export async function processInvoice(imageBase64: string) {
+// 2. Esquema de LISTA (La clave del éxito)
+const batchSchema = z.object({
+	invoices: z
+		.array(singleInvoiceSchema)
+		.describe("Lista de TODAS las facturas detectadas en el archivo"),
+});
+
+export async function processInvoice(fileBase64: string, mediaType: string) {
 	try {
-		//Usamos generateText con Output.object para forzar una respuesta JSON estructurada
 		const result = await generateText({
 			model: google("gemini-2.5-flash"),
 			messages: [
 				{
-					role: "user" as const,
+					role: "user",
 					content: [
 						{
-							type: "text" as const,
-							text: "Analiza esta imagen de factura y extrae los datos según el esquema.",
+							type: "text",
+							// PROMPT HÍBRIDO: Funciona para 1 foto o para 1 PDF de 50 páginas
+							text: "Analiza este documento. Puede contener una sola factura o múltiples facturas de diferentes proveedores (compaginadas). Extrae CADA comprobante como un objeto independiente en la lista. Si es un PDF largo, recorre todas las páginas.",
 						},
-						{ type: "image" as const, image: imageBase64 },
+						{ type: "file", data: fileBase64, mediaType: mediaType },
 					],
 				},
 			],
-			output: Output.object({ schema: invoiceSchema }),
+			// Forzamos siempre una estructura de LISTA, aunque sea de 1 elemento
+			output: Output.object({ schema: batchSchema }),
 		});
 
-		// Devolvemos el objeto limpio (JSON)
-		return { success: true, data: result.output };
+		return { success: true, data: result.output.invoices };
 	} catch (error: any) {
-		console.error("Error procesando factura:", error);
+		console.error("Error IA:", error);
 		return { success: false, error: error.message };
 	}
 }
