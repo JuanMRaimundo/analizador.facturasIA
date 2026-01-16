@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import MultiUploader from "./components/MultiUploader";
 import { processInvoice } from "./actions";
 import InvoiceResult from "./components/InvoiceResult";
+
+export const maxDuration = 60;
 
 export default function Home() {
 	// Estado para la "Cola" de archivos sin procesar
@@ -13,6 +15,22 @@ export default function Home() {
 	const [invoices, setInvoices] = useState<any[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [currentFile, setCurrentFile] = useState("");
+	//Contador para limitar las solicitudes- Seguridad de Tokens!
+	const [usageCount, setUsageCount] = useState(0);
+	const MAX_FREE_TRIES = 5; // Límite de 5 pruebas
+
+	useEffect(() => {
+		const storedCount = localStorage.getItem("invoice_app_usage");
+		if (storedCount) {
+			setUsageCount(parseInt(storedCount));
+		}
+	}, []);
+
+	const incrementUsage = () => {
+		const newCount = usageCount + 1;
+		setUsageCount(newCount);
+		localStorage.setItem("invoice_app_usage", newCount.toString());
+	};
 
 	// Función para agregar a la cola (sin procesar aún)
 	const handleAddFiles = (newFiles: File[]) => {
@@ -42,14 +60,20 @@ export default function Home() {
 			reader.onerror = (error) => reject(error);
 		});
 	};
-	const wait = (ms: number) =>
-		new Promise((resolve) => setTimeout(resolve, ms));
+
 	const handleProcessQueue = async () => {
+		if (usageCount >= MAX_FREE_TRIES) {
+			alert("🔒 Límite de demo alcanzado. ¡Gracias por visitar mi portfolio!");
+			return;
+		}
+
 		if (fileQueue.length === 0) return;
 
 		setLoading(true);
 		setInvoices([]); // Reiniciamos (o podrías no hacerlo si quieres acumular)
 
+		const wait = (ms: number) =>
+			new Promise((resolve) => setTimeout(resolve, ms));
 		// Usamos una variable temporal para ir acumulando todo
 		let allInvoices: any[] = [];
 
@@ -57,14 +81,15 @@ export default function Home() {
 			const file = fileQueue[i];
 			setCurrentFile(`Analizando ${i + 1}/${fileQueue.length}: ${file.name}`);
 
+			if (usageCount >= MAX_FREE_TRIES) {
+				break;
+			}
 			try {
 				const base64 = await fileToBase64(file);
+				incrementUsage();
 				const response = await processInvoice(base64, file.type);
 
 				if (response.success) {
-					// TRUCO: Usamos el spread operator (...) para "sacar" las facturas de la lista
-					// y agregarlas al array principal.
-					// Si el PDF trajo 20 facturas, las 20 se agregan individualmente.
 					if (Array.isArray(response.data)) {
 						allInvoices = [...allInvoices, ...response.data];
 					} else if (response.data) {
@@ -85,7 +110,7 @@ export default function Home() {
 		setInvoices(allInvoices);
 		setLoading(false);
 		setCurrentFile("");
-		// setFileQueue([]); // Descomentar si quieres limpiar la cola al terminar
+		setFileQueue([]); //Limpiamos la cola luego de que carguen archivos, asi desaparece el botón
 	};
 
 	// --- LÓGICA DEL DASHBOARD (Igual que antes) ---
@@ -172,17 +197,26 @@ export default function Home() {
 
 			{/* BOTÓN DE PROCESAR */}
 			{fileQueue.length > 0 && !loading && (
-				<button
-					onClick={handleProcessQueue}
-					className="mb-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-4 px-12 rounded-full shadow-2xl transition-all hover:scale-105 text-lg"
-				>
-					🚀 Procesar {fileQueue.length} Facturas
-				</button>
-			)}
+				<div className="flex flex-col items-center gap-4 mb-12">
+					<button
+						onClick={handleProcessQueue}
+						disabled={usageCount >= MAX_FREE_TRIES}
+						className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-4 px-12 rounded-full shadow-2xl transition-all hover:scale-105 text-lg disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+					>
+						{usageCount >= MAX_FREE_TRIES
+							? "🔒 Límite de Demo Alcanzado"
+							: `🚀 Procesar Facturas (${
+									MAX_FREE_TRIES - usageCount
+							  } intentos restantes)`}
+					</button>
 
-			{loading && (
-				<div className="mt-4 mb-12 text-2xl text-blue-300 animate-pulse font-mono">
-					⏳ {currentFile}
+					<p className="text-gray-500 text-xs mt-2">
+						Modo Demo Portfolio:{" "}
+						<span className="text-blue-300 font-bold">
+							{MAX_FREE_TRIES - usageCount}
+						</span>{" "}
+						usos gratuitos disponibles.
+					</p>
 				</div>
 			)}
 

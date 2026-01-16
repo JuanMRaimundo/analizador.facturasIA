@@ -48,7 +48,7 @@ export default function InvoiceResult({ data }: { data: InvoiceData }) {
 	};
 
 	return (
-		<div className="w-full max-w-4xl bg-white text-gray-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-700">
+		<div className="w-full bg-white text-gray-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-700">
 			{/* Encabezado de la Factura */}
 			<div className="bg-gray-50 p-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
 				<div>
