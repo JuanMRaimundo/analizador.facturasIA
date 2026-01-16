@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import MultiUploader from "./components/ImageUploader";
+import MultiUploader from "./components/MultiUploader";
 import { processInvoice } from "./actions";
 import InvoiceResult from "./components/InvoiceResult";
 
